@@ -7,7 +7,23 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Message extends Model
 {
-    protected $fillable = ['sender_id', 'receiver_id', 'message', 'is_read'];
+    protected $fillable = [
+        'sender_id', 
+        'receiver_id', 
+        'message', 
+        'is_read', 
+        'is_system_message',
+        'attachment_path',
+        'attachment_name',
+        'attachment_type',
+        'attachment_size'
+    ];
+
+    protected $casts = [
+        'is_read' => 'boolean',
+        'is_system_message' => 'boolean',
+        'attachment_size' => 'integer',
+    ];
 
     public function sender(): BelongsTo
     {

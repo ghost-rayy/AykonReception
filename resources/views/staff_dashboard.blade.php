@@ -3,537 +3,1001 @@
 @section('title', 'Staff Dashboard')
 
 @section('content')
-<style>
-    body {
-        background: #f8f9fa;
-    }
+@php
+    $receptionist = \App\Models\User::where('role', 'receptionist')->first();
+@endphp
+<div class="container py-4">
+    <div class="row">
+        <!-- Main Content -->
+        <div class="col-lg-8">
+            <!-- Stats Cards - Compact & Clean -->
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-sm-6 col-md-4">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body text-center py-4">
+                            <i class="bi bi-calendar-check text-primary fs-2 mb-2"></i>
+                            <p class="text-muted small mb-1">Today's Visits</p>
+                            <h4 class="mb-0 text-primary fw-bold" id="today-visits-count">
+                                {{ \App\Models\Visitors::where('user_id', auth()->id())->whereDate('created_at', today())->count() }}
+                            </h4>
+                        </div>
+                    </div>
+                </div>
 
-    .dash-card {
-        border: none;
+                <div class="col-12 col-sm-6 col-md-4">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body text-center py-4">
+                            <i class="bi bi-clock-history text-warning fs-2 mb-2"></i>
+                            <p class="text-muted small mb-1">Upcoming</p>
+                            <h4 class="mb-0 text-warning fw-bold" id="upcoming-count">
+                                {{ \App\Models\Visitors::where('user_id', auth()->id())->whereNull('check_out_time')->count() }}
+                            </h4>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-4">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body text-center py-4">
+                            <i class="bi bi-check2-all text-success fs-2 mb-2"></i>
+                            <p class="text-muted small mb-1">Completed</p>
+                            <h4 class="mb-0 text-success fw-bold" id="completed-count">
+                                {{ \App\Models\Visitors::where('user_id', auth()->id())->whereNotNull('check_out_time')->count() }}
+                            </h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Status Notification Cards --}}
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-sm-6">
+                    <div class="card border-0 shadow-sm h-100 status-card status-card-free bg-success-subtle {{ $currentStatus === 'free' ? 'active' : '' }}" data-status="free" style="cursor: pointer; transition: all 0.3s ease;">
+                        <div class="card-body text-center py-4 position-relative">
+                            <div class="status-indicator" id="free-indicator" style="display: {{ $currentStatus === 'free' ? 'block' : 'none' }};">
+                                <span class="badge bg-success position-absolute top-0 start-50 translate-middle">
+                                    <i class="bi bi-check-circle-fill me-1"></i>Active
+                                </span>
+                            </div>
+                            <i class="bi bi-check-circle text-success fs-1 mb-3" id="free-icon"></i>
+                            <h5 class="mb-2 text-success fw-bold" id="free-title">I'm Free</h5>
+                            <p class="text-muted small mb-0" id="free-subtitle">Click to notify receptionist</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-sm-6">
+                    <div class="card border-0 shadow-sm h-100 status-card status-card-busy bg-danger-subtle {{ $currentStatus === 'busy' ? 'active' : '' }}" data-status="busy" style="cursor: pointer; transition: all 0.3s ease;">
+                        <div class="card-body text-center py-4 position-relative">
+                            <div class="status-indicator" id="busy-indicator" style="display: {{ $currentStatus === 'busy' ? 'block' : 'none' }};">
+                                <span class="badge bg-danger position-absolute top-0 start-50 translate-middle">
+                                    <i class="bi bi-calendar-x-fill me-1"></i>Active
+                                </span>
+                            </div>
+                            <i class="bi bi-calendar-x text-danger fs-1 mb-3" id="busy-icon"></i>
+                            <h5 class="mb-2 text-danger fw-bold" id="busy-title">In Meeting</h5>
+                            <p class="text-muted small mb-0" id="busy-subtitle">Click to notify receptionist</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom">
+                    <h6 class="mb-0 fw-semibold text-dark">
+                        <i class="bi bi-clock-history me-2 text-primary"></i>My Visitors Activity
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    @php
+                        $activities = collect();
+
+                       $recentVisitors = \App\Models\Visitors::where('user_id', auth()->id())
+                        ->latest()->take(10)->get()
+                        ->map(fn($v) => [
+                            'type' => 'visitor',
+
+                            // Photo key for Blade
+                            'photo' => $v->photo_path ? asset('storage/' . $v->photo_path) : null,
+
+                            // Icon for when there is no photo
+                            'icon' => 'bi-person-fill',
+
+                            'color' => $v->status === 'checked_in'
+                                ? 'warning'
+                                : ($v->status === 'checked_out' ? 'success' : 'danger'),
+
+                            'title' => $v->name,
+
+                            'subtitle' => ($v->status === 'checked_in'
+                                ? 'Checked in'
+                                : ($v->status === 'checked_out' ? 'Checked out' : 'Cancelled'))
+                                . ' • '
+                                . ($v->status === 'checked_out'
+                                    ? $v->check_out_time->diffForHumans()
+                                    : $v->check_in_time->diffForHumans()),
+
+                            'id' => $v->id
+                        ]);
+
+                        $recentAppointments = \App\Models\Appointments::where('user_id', auth()->id())
+                            ->latest()->take(10)->get()
+                            ->map(fn($a) => [
+                                'type' => 'appointment',
+                                'photo' => null, // Appointments don't have photos
+                                'icon' => 'bi-calendar-event',
+                                'color' => $a->status === 'completed' ? 'secondary' : 'primary',
+                                'title' => $a->visitor_name ?? 'Appointment',
+                                'subtitle' => $a->appointment_time->format('M d, H:i') . ' • ' . ucfirst($a->status),
+                                'id' => $a->id
+                            ]);
+
+                        $activities = $recentVisitors->merge($recentAppointments)->sortByDesc(fn($i) => $i['id'] ?? now())->take(8);
+                    @endphp
+
+                    @if($activities->count())
+                        <div class="list-group list-group-flush">
+                            @foreach($activities as $activity)
+                                <a href="#" class="list-group-item list-group-item-action py-3 px-4 activity-item"
+                                   data-type="{{ $activity['type'] }}" data-id="{{ $activity['id'] ?? '' }}">
+                                    <div class="d-flex align-items-center">
+                                        <div class="flex-shrink-0">
+                                            @if(!empty($activity['photo']))
+                                                <img src="{{ $activity['photo'] }}" alt="{{ $activity['title'] }}" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;">
+                                            @else
+                                                <div class="avatar avatar-sm bg-{{ $activity['color'] ?? 'primary' }}-subtle text-{{ $activity['color'] ?? 'primary' }} rounded-circle">
+                                                    <i class="bi {{ $activity['icon'] ?? 'bi-circle' }} fs-5"></i>
+                                                </div>
+                                            @endif
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <div class="fw-semibold text-dark">{{ $activity['title'] }}</div>
+                                            <small class="text-muted">{{ $activity['subtitle'] }}</small>
+                                        </div>
+                                        <i class="bi bi-chevron-right text-muted"></i>
+                                    </div>
+                                </a>
+                            @endforeach
+                        </div>
+                    @else
+                        <p class="text-center text-muted py-5">No recent activity</p>
+                    @endif
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar -->
+        <div class="col-lg-4">
+            <!-- Notifications Card -->
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-header bg-white border-bottom">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-semibold text-dark">
+                            <i class="bi bi-bell-fill me-2 text-primary"></i>Notifications
+                        </h6>
+                        <small class="text-muted" id="notifications-last-update">
+                            <i class="bi bi-arrow-clockwise"></i> <span>Just now</span>
+                        </small>
+                    </div>
+                </div>
+                <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                    <div id="notifications-container">
+                        <div class="text-center py-4">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mt-2 small">Loading notifications...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Appointments Card -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom">
+                    <ul class="nav nav-tabs card-header-tabs" id="sidebarTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="appointments-tab" data-bs-toggle="tab" data-bs-target="#appointments" type="button" role="tab" aria-controls="appointments" aria-selected="true">
+                                <i class="bi bi-calendar-event me-1"></i>My Appointments
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body p-0">
+                    <div class="tab-content" id="sidebarTabsContent">
+                        <!-- Appointments Tab -->
+                        <div class="tab-pane fade show active" id="appointments" role="tabpanel" aria-labelledby="appointments-tab">
+                            @php
+                                $sidebarAppointments = \App\Models\Appointments::where('user_id', auth()->id())
+                                    ->latest()->take(10)->get();
+                            @endphp
+                            @if($sidebarAppointments->count())
+                                <div class="list-group list-group-flush">
+                                    @foreach($sidebarAppointments as $appointment)
+                                        @php
+                                            $statusColor = match($appointment->status) {
+                                                'pending' => 'warning',
+                                                'confirmed' => 'success',
+                                                'completed' => 'success',
+                                                'canceled' => 'danger',
+                                                default => 'secondary'
+                                            };
+                                        @endphp
+                                        <a href="#" class="list-group-item list-group-item-action py-3 px-4 activity-item"
+                                           data-type="appointment" data-id="{{ $appointment->id }}">
+                                            <div class="d-flex align-items-center">
+                                                <div class="flex-shrink-0">
+                                                </div>
+                                                <div class="flex-grow-1 ms-3">
+                                                    <div class="fw-semibold text-dark">{{ $appointment->visitor_name ?? 'Appointment' }}</div>
+                                                    <small class="text-muted">{{ $appointment->appointment_time->format('M d, H:i') }} • <span class="text-{{ $statusColor }}">{{ ucfirst($appointment->status) }}</span></small>
+                                                </div>
+                                                <div class="d-flex align-items-center">
+                                                    <!-- <button class="btn btn-sm btn-outline-primary me-2" onclick="showAppointmentModal({{ $appointment->id }})">
+                                                        <i class="bi bi-eye"></i> View
+                                                    </button> -->
+                                                    <i class="bi bi-chevron-right text-muted"></i>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            @else
+                                <p class="text-center text-muted py-5">No appointments</p>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-0 pb-0" style="background: linear-gradient(135deg, #0d1b2a, #1a2f47); border-radius: 16px 16px 0 0;">
+                <div class="d-flex align-items-center gap-3 w-100">
+                    <div id="modalIcon" class="text-white" style="font-size: 2rem;">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h5 class="modal-title text-white fw-bold mb-0" id="detailsModalLabel">Details</h5>
+                        <small class="text-white-50" id="modalSubtitle">Loading...</small>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body p-4" id="modalBody">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted mt-3">Loading details...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .avatar { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+    .avatar-xs { width: 32px; height: 32px; font-size: 0.85rem; }
+    .avatar-sm { width: 40px; height: 40px; font-size: 0.85rem; }
+    .activity-item:hover, .notification-item:hover { background-color: #f8f9fa; cursor: pointer; }
+    .card { transition: transform 0.2s; border-radius: 12px; }
+    .card:hover { transform: translateY(-2px); }
+    .status-card:hover { transform: translateY(-4px); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    
+    /* Status Card Switch Styles */
+    .status-card {
+        position: relative;
+        opacity: 0.7;
+        transition: all 0.3s ease;
+    }
+    
+    .status-card.active {
+        opacity: 1;
+        border: 3px solid #0d1b2a !important;
+        box-shadow: 0 8px 25px rgba(13, 27, 42, 0.3) !important;
+        transform: scale(1.02);
+    }
+    
+    .status-card.active .status-indicator {
+        display: block !important;
+    }
+    
+    .status-card:not(.active) {
+        opacity: 0.6;
+        filter: grayscale(0.3);
+    }
+    
+    .status-card:not(.active):hover {
+        opacity: 0.85;
+        filter: grayscale(0);
+    }
+    
+    /* Modal Styles */
+    .modal-content {
         border-radius: 16px;
-        padding: 25px 20px;
-        transition: transform .25s ease, box-shadow .25s ease;
-        background: #fff;
-        text-align: center;
+        overflow: hidden;
     }
-    .dash-card:hover {
-        transform: translateY(-6px);
-        box-shadow: 0 12px 24px rgba(0,0,0,0.12);
+    
+    .detail-item {
+        transition: all 0.2s ease;
+        border: 1px solid #e2e8f0;
     }
-    .dash-icon {
-        font-size: 35px;
-        opacity: .85;
-        margin-bottom: 5px;
+    
+    .detail-item:hover {
+        border-color: #0d1b2a;
+        box-shadow: 0 2px 8px rgba(13, 27, 42, 0.1);
     }
-    .section-header {
-        background: linear-gradient(135deg, #28a745, #20c997);
-        color: white;
-        border-radius: 16px 16px 0 0;
-        padding: 18px;
+    
+    .modal-header {
+        background: linear-gradient(135deg, #0d1b2a, #1a2f47);
     }
-    .conversation-item {
-        cursor: pointer;
-        transition: background .2s;
+    
+    /* Notification Styles */
+    .notification-item {
+        transition: all 0.2s ease;
+        border-left-width: 3px !important;
     }
-    .conversation-item:hover {
-        background: #f1f3f5;
+    
+    .notification-item:hover {
+        background-color: #f8f9fa !important;
+        transform: translateX(2px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
-    .badge {
+    
+    #notifications-container {
+        scrollbar-width: thin;
+        scrollbar-color: #dee2e6 transparent;
+    }
+    
+    #notifications-container::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    #notifications-container::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    #notifications-container::-webkit-scrollbar-thumb {
+        background-color: #dee2e6;
+        border-radius: 3px;
+    }
+    
+    #notifications-container::-webkit-scrollbar-thumb:hover {
+        background-color: #adb5bd;
+    }
+    
+    #notifications-last-update {
         font-size: 0.75rem;
     }
 </style>
 
-<div class="row g-4 mb-4">
-    <div class="col-md-4">
-        <div class="dash-card shadow-sm">
-            <div class="dash-icon"><i class="bi bi-calendar-event-fill text-success"></i></div>
-            <h6 class="text-muted mb-1">Today's Appointments</h6>
-            <h2 class="fw-bold">{{ \App\Models\Appointments::where('user_id', auth()->id())->whereDate('appointment_time', today())->count() }}</h2>
-        </div>
-    </div>
-
-    <div class="col-md-4">
-        <div class="dash-card shadow-sm">
-            <div class="dash-icon"><i class="bi bi-clock-fill text-warning"></i></div>
-            <h6 class="text-muted mb-1">Upcoming Appointments</h6>
-            <h2 class="fw-bold">{{ \App\Models\Appointments::where('user_id', auth()->id())->where('appointment_time', '>', now())->count() }}</h2>
-        </div>
-    </div>
-
-    <div class="col-md-4">
-        <div class="dash-card shadow-sm">
-            <div class="dash-icon"><i class="bi bi-check-circle-fill text-primary"></i></div>
-            <h6 class="text-muted mb-1">Completed Appointments</h6>
-            <h2 class="fw-bold">{{ \App\Models\Appointments::where('user_id', auth()->id())->where('status', 'completed')->count() }}</h2>
-        </div>
-    </div>
-</div>
-
-<div class="row g-4">
-    {{-- Messages Panel --}}
-    <div class="col-md-6">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-chat-dots-fill"></i> Messages</h5>
-                <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#newMessageModal">
-                    <i class="bi bi-plus-circle">New Message</i>
-                </button>
-            </div>
-            <div class="card-body" style="height: 400px; overflow-y: auto;">
-                @php
-                    $conversations = \App\Models\Message::where(function($query) {
-                        $query->where('sender_id', auth()->id())
-                              ->orWhere('receiver_id', auth()->id());
-                    })
-                    ->with(['sender', 'receiver'])
-                    ->orderBy('created_at', 'desc')
-                    ->get()
-                    ->groupBy(function($message) {
-                        $ids = [$message->sender_id, $message->receiver_id];
-                        sort($ids);
-                        return implode('-', $ids);
-                    })
-                    ->map(function($messages) {
-                        $latestMessage = $messages->first();
-                        $otherUser = $latestMessage->sender_id === auth()->id() ? $latestMessage->receiver : $latestMessage->sender;
-                        return [
-                            'other_user' => $otherUser,
-                            'latest_message' => $latestMessage,
-                            'unread_count' => $messages->where('receiver_id', auth()->id())->where('is_read', false)->count()
-                        ];
-                    });
-                @endphp
-
-                @if($conversations->isEmpty())
-                    <p class="text-muted text-center">No conversations yet.</p>
-                @else
-                    @foreach($conversations as $conversation)
-                        <div class="conversation-item d-flex align-items-center p-2 border-bottom" data-user-id="{{ $conversation['other_user']->id }}" data-type="chat" onclick="console.log('Clicked conversation for user {{ $conversation['other_user']->id }}')">
-                            <img src="https://ui-avatars.com/api/?name={{ urlencode($conversation['other_user']->name) }}&background=007bff&color=fff" class="rounded-circle me-3" width="40" height="40">
-                            <div class="flex-grow-1">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <strong class="small">{{ $conversation['other_user']->name }}</strong>
-                                    <small class="text-muted">{{ $conversation['latest_message']->created_at->diffForHumans() }}</small>
-                                </div>
-                                <p class="mb-0 small text-muted">{{ Str::limit($conversation['latest_message']->message, 50) }}</p>
-                                @if($conversation['unread_count'] > 0)
-                                    <span class="badge bg-danger">{{ $conversation['unread_count'] }}</span>
-                                @endif
-                            </div>
-                        </div>
-                    @endforeach
-                @endif
-            </div>
-        </div>
-    </div>
-
-    {{-- Notifications Panel --}}
-    <div class="col-md-6">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-warning text-white">
-                <h5 class="mb-0"><i class="bi bi-bell-fill"></i> Notifications</h5>
-            </div>
-            <div class="card-body" style="height: 400px; overflow-y: auto;">
-                @php
-                    $notifications = \App\Models\Message::where('receiver_id', auth()->id())
-                        ->where('is_read', false)
-                        ->with('sender')
-                        ->orderBy('created_at', 'desc')
-                        ->get()
-                        ->map(function($message) {
-                            return [
-                                'type' => 'message',
-                                'message' => 'New message from ' . $message->sender->name . ': ' . Str::limit($message->message, 50),
-                                'time' => $message->created_at->diffForHumans(),
-                            ];
-                        });
-
-                    $visitorNotifications = collect(\App\Models\Visitors::where('user_id', auth()->id())
-                        ->where('created_at', '>=', now()->subHours(24))
-                        ->get()
-                        ->map(function($visitor) {
-                            return [
-                                'type' => 'visitor',
-                                'id' => $visitor->id,
-                                'message' => 'New visitor: ' . $visitor->name . ' (' . $visitor->phone . ')',
-                                'time' => $visitor->created_at->diffForHumans(),
-                            ];
-                        }));
-
-                    $appointmentNotifications = collect(\App\Models\Appointments::where('user_id', auth()->id())
-                        ->where('created_at', '>=', now()->subHours(24))
-                        ->get()
-                        ->map(function($appointment) {
-                            return [
-                                'type' => 'appointment',
-                                'id' => $appointment->id,
-                                'message' => 'Appointment: ' . $appointment->visitor_name . ' at ' . $appointment->appointment_time->format('H:i') . ' (' . ucfirst($appointment->status) . ')',
-                                'time' => $appointment->created_at->diffForHumans(),
-                            ];
-                        }));
-
-                    $visitorNotifications = $visitorNotifications->concat($appointmentNotifications);
-
-                    $notifications = collect($notifications)->concat($visitorNotifications)->sortByDesc('time');
-                @endphp
-
-                @if($notifications->isNotEmpty())
-                    @foreach($notifications as $notification)
-                        <div class="d-flex align-items-center p-3 border-bottom notification-item" data-type="{{ $notification['type'] }}" data-id="{{ $notification['id'] ?? '' }}" style="cursor: pointer;">
-                            <div class="flex-shrink-0 me-3">
-                                <i class="bi {{ $notification['type'] === 'appointment' ? 'bi-calendar-event-fill text-primary' : ($notification['type'] === 'visitor' ? 'bi-person-fill text-success' : 'bi-chat-dots-fill text-info') }}" style="font-size: 24px;"></i>
-                            </div>
-                            <div class="flex-grow-1">
-                                <p class="mb-1">{{ $notification['message'] }}</p>
-                                <small class="text-muted">{{ $notification['time'] }}</small>
-                            </div>
-                        </div>
-                    @endforeach
-                @else
-                    <p class="text-muted mb-0">No new notifications.</p>
-                @endif
-            </div>
-        </div>
-    </div>
-</div>
-
-
-
-<!-- New Message Modal -->
-<div class="modal fade" id="newMessageModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content rounded-3 shadow-sm">
-            <div class="modal-header">
-                <h5 class="modal-title">Send New Message</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" action="{{ route('messages.store') }}">
-                @csrf
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="receiver_id" class="form-label">To</label>
-                        <select name="receiver_id" id="receiver_id" class="form-select" required>
-                            <option value="">Select recipient</option>
-                            @php
-                                $users = \App\Models\User::whereIn('role', ['staff', 'receptionist'])->where('id', '!=', auth()->id())->get();
-                            @endphp
-                            @foreach($users as $user)
-                                <option value="{{ $user->id }}">{{ $user->name }} ({{ ucfirst($user->role) }})</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="message" class="form-label">Message</label>
-                        <textarea name="message" id="message" class="form-control" rows="4" required></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Send Message</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 @endsection
 
 @section('scripts')
-<style>
-    .chat-messages {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        padding: 10px;
-    }
-    .message {
-        max-width: 70%;
-        margin-bottom: 10px;
-    }
-    .message.sent {
-        align-self: flex-end;
-    }
-    .message.received {
-        align-self: flex-start;
-    }
-    .message-content {
-        padding: 8px 12px;
-        border-radius: 18px;
-        position: relative;
-    }
-    .message.sent .message-content {
-        background: #007bff;
-        color: white;
-        border-bottom-right-radius: 4px;
-    }
-    .message.received .message-content {
-        background: #f1f3f4;
-        color: #333;
-        border-bottom-left-radius: 4px;
-    }
-</style>
 <script>
-    // Auto scroll messages
-    const messagesContainer = document.querySelector('#messagesContainer');
-    if(messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-    // Handle notification clicks
-    document.querySelectorAll('.notification-item').forEach(item => {
-        item.addEventListener('click', function() {
+    // Click handlers
+    document.querySelectorAll('.activity-item').forEach(el => {
+        el.addEventListener('click', function(e) {
+            e.preventDefault();
             const type = this.dataset.type;
             const id = this.dataset.id;
-
-            if (type === 'visitor' && id) {
-                showVisitorModal(id);
-            } else if (type === 'appointment' && id) {
-                showAppointmentModal(id);
-            }
+            if (type === 'visitor') showVisitorModal(id);
+            if (type === 'appointment') showAppointmentModal(id);
         });
     });
 
-    // Handle conversation clicks
-    document.addEventListener('click', function(e) {
-        const conversationItem = e.target.closest('.conversation-item');
-        if (conversationItem) {
-            const type = conversationItem.dataset.type;
-            const userId = conversationItem.dataset.userId;
-
-            console.log('Conversation clicked via event listener:', { type, userId, element: conversationItem });
-
-            if (type === 'chat' && userId) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('Calling showChatModal with userId:', userId);
-                showChatModal(userId);
-            }
+    // Function to update status (switch behavior)
+    function updateStatus(newStatus) {
+        // Immediately update UI to show switch behavior
+        const freeCard = document.querySelector('.status-card-free');
+        const busyCard = document.querySelector('.status-card-busy');
+        
+        if (newStatus === 'free') {
+            freeCard.classList.add('active');
+            busyCard.classList.remove('active');
+            document.getElementById('free-indicator').style.display = 'block';
+            document.getElementById('busy-indicator').style.display = 'none';
+        } else if (newStatus === 'busy') {
+            busyCard.classList.add('active');
+            freeCard.classList.remove('active');
+            document.getElementById('busy-indicator').style.display = 'block';
+            document.getElementById('free-indicator').style.display = 'none';
         }
-    });
 
-    function showVisitorModal(visitorId) {
-        fetch(`/visitors/${visitorId}/details`, {
-            method: 'GET',
+        // Update status via API
+        fetch('/messages/status', {
+            method: 'POST',
             headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                 'Accept': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            const modalHtml = `
-                <div class="modal fade" id="visitorModal" tabindex="-1">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">Visitor Details</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <p><strong>Name:</strong> ${data.name}</p>
-                                        <p><strong>Email:</strong> ${data.email || 'N/A'}</p>
-                                        <p><strong>Phone:</strong> ${data.phone}</p>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <p><strong>Purpose:</strong> ${data.purpose}</p>
-                                        <p><strong>Company:</strong> ${data.company || 'N/A'}</p>
-                                        <p><strong>Created:</strong> ${new Date(data.created_at).toLocaleString()}</p>
-                                    </div>
-                                </div>
-                                ${data.notes ? `<div class="mt-3"><strong>Notes:</strong><br>${data.notes}</div>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            // Remove existing modal if present
-            const existingModal = document.getElementById('visitorModal');
-            if (existingModal) existingModal.remove();
-
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
-            const modal = new bootstrap.Modal(document.getElementById('visitorModal'));
-            modal.show();
-        });
-    }
-
-    function showAppointmentModal(appointmentId) {
-        fetch(`/appointments/${appointmentId}/details`, {
-            method: 'GET',
-            headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                'Accept': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            const modalHtml = `
-                <div class="modal fade" id="appointmentModal" tabindex="-1">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">Appointment Details</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <p><strong>Visitor:</strong> ${data.visitor_name}</p>
-                                        <p><strong>Phone:</strong> ${data.visitor_phone}</p>
-                                        <p><strong>Email:</strong> ${data.visitor ? data.visitor.email : 'N/A'}</p>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <p><strong>Date & Time:</strong> ${new Date(data.appointment_time).toLocaleString()}</p>
-                                        <p><strong>Status:</strong> <span class="badge bg-${data.status === 'confirmed' ? 'success' : (data.status === 'pending' ? 'warning' : 'danger')}">${data.status}</span></p>
-                                        <p><strong>Purpose:</strong> ${data.purpose || 'N/A'}</p>
-                                    </div>
-                                </div>
-                                ${data.notes ? `<div class="mt-3"><strong>Notes:</strong><br>${data.notes}</div>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            // Remove existing modal if present
-            const existingModal = document.getElementById('appointmentModal');
-            if (existingModal) existingModal.remove();
-
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
-            const modal = new bootstrap.Modal(document.getElementById('appointmentModal'));
-            modal.show();
-        });
-    }
-
-    function showChatModal(userId) {
-        console.log('Opening chat modal for user:', userId);
-
-        fetch(`/messages/conversation/${userId}`, {
-            method: 'GET',
-            headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                'Accept': 'application/json'
-            }
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                status: newStatus
+            })
         })
         .then(response => {
-            console.log('Conversation fetch response:', response);
+            if (!response.ok) {
+                throw new Error('Failed to update status: ' + response.status);
+            }
             return response.json();
         })
-        .then(data => {
-            console.log('Conversation data:', data);
-
-            const currentUserId = {{ auth()->id() }};
-            const otherUser = data.messages.length > 0 ?
-                (data.messages[0].sender_id === currentUserId ? data.messages[0].receiver : data.messages[0].sender) :
-                { name: 'Unknown User' };
-
-            const messagesHtml = data.messages.map(message => {
-                const isSent = message.sender_id === currentUserId;
-                const time = new Date(message.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                return `
-                    <div class="message ${isSent ? 'sent' : 'received'}">
-                        <div class="message-content">
-                            <p class="mb-1">${message.message}</p>
-                            <small class="text-muted">${time}</small>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            const modalHtml = `
-                <div class="modal fade" id="chatModal" tabindex="-1">
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">
-                                    <i class="bi bi-chat-dots-fill"></i> Chat with ${otherUser.name}
-                                </h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body" style="height: 400px; overflow-y: auto;">
-                                <div id="chatMessages" class="chat-messages">
-                                    ${messagesHtml || '<p class="text-muted text-center">No messages yet. Start the conversation!</p>'}
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <form id="sendMessageForm" class="w-100">
-                                    <div class="input-group">
-                                        <input type="text" id="messageInput" class="form-control" placeholder="Type your message..." required>
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="bi bi-send-fill"></i>
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            // Remove existing modal if present
-            const existingModal = document.getElementById('chatModal');
-            if (existingModal) existingModal.remove();
-
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
-            const modal = new bootstrap.Modal(document.getElementById('chatModal'));
-            modal.show();
-
-            // Scroll to bottom
-            const chatMessages = document.getElementById('chatMessages');
-            if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight;
-
-            // Handle message sending
-            const sendForm = document.getElementById('sendMessageForm');
-            if (sendForm) {
-                sendForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    const messageInput = document.getElementById('messageInput');
-                    const message = messageInput.value.trim();
-
-                    console.log('Sending message:', message);
-
-                    if (message) {
-                        fetch('/messages', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                                'Accept': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                receiver_id: userId,
-                                message: message
-                            })
+        .then(statusData => {
+            if (statusData.success) {
+                // Status update was successful - show success immediately
+                const successMessage = newStatus === 'free'
+                    ? 'Status updated successfully! You are now free.'
+                    : 'Status updated successfully! You are now in a meeting.';
+                showSuccessModal(successMessage);
+                
+                // Try to send notification to receptionist (non-blocking)
+                const receptionistId = {{ $receptionist ? $receptionist->id : 'null' }};
+                if (receptionistId) {
+                    const message = newStatus === 'free' 
+                        ? `{{ auth()->user()->name }} is now free`
+                        : `{{ auth()->user()->name }} is now in a meeting`;
+                    
+                    // Send message in background - don't wait for it or show errors
+                    fetch('/messages', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            'Accept': 'application/json'
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({
+                            receiver_id: receptionistId,
+                            message: message
                         })
-                        .then(response => response.json())
-                        .then(data => {
-                            console.log('Message send response:', data);
-                            if (data.success) {
-                                messageInput.value = '';
-                                // Add new message to chat
-                                const chatMessages = document.getElementById('chatMessages');
-                                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                                const messageHtml = `
-                                    <div class="message sent">
-                                        <div class="message-content">
-                                            <p class="mb-1">${message}</p>
-                                            <small class="text-muted">${time}</small>
-                                        </div>
-                                    </div>
-                                `;
-                                chatMessages.insertAdjacentHTML('beforeend', messageHtml);
-                                chatMessages.scrollTop = chatMessages.scrollHeight;
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error sending message:', error);
-                        });
-                    }
-                });
+                    }).catch(err => {
+                        // Silently fail - status was already updated successfully
+                        console.log('Could not send notification to receptionist:', err);
+                    });
+                }
+            } else {
+                // Revert UI if update failed
+                updateStatusCards();
+                throw new Error('Failed to update status');
             }
         })
         .catch(error => {
-            console.error('Error fetching conversation:', error);
+            console.error('Error updating status:', error);
+            // Revert UI on error
+            updateStatusCards();
+            alert('Error updating status. Please try again.');
+        });
+    }
+
+    // Status card click handlers with switch behavior
+    document.querySelector('.status-card-free').addEventListener('click', function() {
+        // Don't do anything if already active
+        if (this.classList.contains('active')) {
+            return;
+        }
+        updateStatus('free');
+    });
+
+    document.querySelector('.status-card-busy').addEventListener('click', function() {
+        // Don't do anything if already active
+        if (this.classList.contains('active')) {
+            return;
+        }
+        updateStatus('busy');
+    });
+
+    // Update status card appearance based on current status (switch behavior)
+    function updateStatusCards() {
+        fetch('/messages/status', {
+            method: 'GET',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            },
+            credentials: 'same-origin',
+            cache: 'no-cache'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch status: ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            const freeCard = document.querySelector('.status-card-free');
+            const busyCard = document.querySelector('.status-card-busy');
+            const currentStatus = data.status || 'free';
+            
+            // Only update if status actually changed
+            const freeIsActive = freeCard.classList.contains('active');
+            const busyIsActive = busyCard.classList.contains('active');
+            
+            // Reset all cards
+            freeCard.classList.remove('active');
+            busyCard.classList.remove('active');
+            document.getElementById('free-indicator').style.display = 'none';
+            document.getElementById('busy-indicator').style.display = 'none';
+
+            // Activate the current status card
+            if (currentStatus === 'free') {
+                freeCard.classList.add('active');
+                document.getElementById('free-indicator').style.display = 'block';
+            } else if (currentStatus === 'busy') {
+                busyCard.classList.add('active');
+                document.getElementById('busy-indicator').style.display = 'block';
+            }
+        })
+        .catch(error => {
+            console.error('Error getting current status:', error);
+            // Don't reset the UI if API call fails - keep the server-side rendered state
+        });
+    }
+
+    // Update status cards on page load (to sync with any changes, but initial state is already set server-side)
+    // Use a small delay to ensure DOM is ready
+    setTimeout(updateStatusCards, 100);
+
+    // Load and refresh notifications every 2 seconds
+    function loadStaffNotifications() {
+        const container = document.getElementById('notifications-container');
+        const lastUpdateEl = document.getElementById('notifications-last-update');
+        
+        if (!container) {
+            console.error('Notifications container not found');
+            return;
+        }
+
+        // Update timestamp
+        if (lastUpdateEl) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+            lastUpdateEl.innerHTML = `<i class="bi bi-arrow-clockwise"></i> <span>${timeStr}</span>`;
+        }
+
+        // Add timestamp to prevent caching
+        const timestamp = new Date().getTime();
+        fetch(`/messages/staff-notifications?t=${timestamp}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to load notifications: ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            let html = '';
+            
+            // Combine visitors and appointments
+            const allNotifications = [];
+            
+            // Add visitors
+            if (data.visitors && data.visitors.length > 0) {
+                data.visitors.forEach(visitor => {
+                    allNotifications.push({
+                        ...visitor,
+                        sortTime: new Date(visitor.check_in_time)
+                    });
+                });
+            }
+            
+            // Add appointments
+            if (data.appointments && data.appointments.length > 0) {
+                data.appointments.forEach(appointment => {
+                    allNotifications.push({
+                        ...appointment,
+                        sortTime: new Date(appointment.appointment_time)
+                    });
+                });
+            }
+            
+            // Sort by time (newest first)
+            allNotifications.sort((a, b) => b.sortTime - a.sortTime);
+            
+            if (allNotifications.length > 0) {
+                allNotifications.forEach(item => {
+                    if (item.type === 'visitor') {
+                        const photoHtml = item.photo_path 
+                            ? `<img src="${item.photo_path}" alt="${item.name}" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;">`
+                            : `<div class="avatar avatar-sm bg-info-subtle text-info rounded-circle">
+                                <i class="bi bi-person-fill fs-5"></i>
+                            </div>`;
+                        
+                        html += `
+                            <div class="list-group-item list-group-item-action py-3 px-4 notification-item" 
+                                 data-type="visitor" 
+                                 data-id="${item.id}"
+                                 style="cursor: pointer; border-left: 3px solid #0dcaf0;">
+                                <div class="d-flex align-items-center">
+                                    <div class="flex-shrink-0">
+                                        ${photoHtml}
+                                    </div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div class="fw-semibold text-dark">${item.name}</div>
+                                            <span class="badge bg-info">Visitor</span>
+                                        </div>
+                                        <small class="text-muted d-block">
+                                            <i class="bi bi-telephone me-1"></i>${item.phone || 'N/A'}
+                                        </small>
+                                        <small class="text-muted d-block">
+                                            <i class="bi bi-clock me-1"></i>Checked in ${item.check_in_human || 'recently'}
+                                        </small>
+                                        ${item.purpose ? `<small class="text-muted d-block"><i class="bi bi-briefcase me-1"></i>${item.purpose}</small>` : ''}
+                                    </div>
+                                    <i class="bi bi-chevron-right text-muted ms-2"></i>
+                                </div>
+                            </div>
+                        `;
+                    } else if (item.type === 'appointment') {
+                        const statusColor = item.status === 'pending' ? 'warning' 
+                            : item.status === 'confirmed' ? 'success'
+                            : item.status === 'completed' ? 'success'
+                            : item.status === 'canceled' ? 'danger'
+                            : 'secondary';
+                        
+                        html += `
+                            <div class="list-group-item list-group-item-action py-3 px-4 notification-item" 
+                                 data-type="appointment" 
+                                 data-id="${item.id}"
+                                 style="cursor: pointer; border-left: 3px solid #0d6efd;">
+                                <div class="d-flex align-items-center">
+                                    <div class="flex-shrink-0">
+                                        <div class="avatar avatar-sm bg-primary-subtle text-primary rounded-circle">
+                                            <i class="bi bi-calendar-event fs-5"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div class="fw-semibold text-dark">${item.visitor_name || 'Appointment'}</div>
+                                            <span class="badge bg-primary">Appointment</span>
+                                        </div>
+                                        <small class="text-muted d-block">
+                                            <i class="bi bi-calendar-check me-1"></i>${item.appointment_time_formatted || 'N/A'}
+                                        </small>
+                                        <small class="text-muted d-block">
+                                            <i class="bi bi-clock me-1"></i>${item.appointment_time_human || 'soon'}
+                                        </small>
+                                        ${item.purpose ? `<small class="text-muted d-block"><i class="bi bi-briefcase me-1"></i>${item.purpose}</small>` : ''}
+                                        <span class="badge bg-${statusColor} mt-1">${item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'N/A'}</span>
+                                    </div>
+                                    <i class="bi bi-chevron-right text-muted ms-2"></i>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+            } else {
+                html = '<div class="text-center text-muted py-5"><i class="bi bi-inbox fs-1 d-block mb-2"></i><p class="mb-0">No new notifications</p></div>';
+            }
+            
+            container.innerHTML = html;
+            
+            // Add click handlers to notification items
+            container.querySelectorAll('.notification-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const type = this.dataset.type;
+                    const id = this.dataset.id;
+                    if (type === 'visitor') {
+                        showVisitorModal(id);
+                    } else if (type === 'appointment') {
+                        showAppointmentModal(id);
+                    }
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error loading notifications:', error);
+            container.innerHTML = '<div class="alert alert-warning py-2 m-3"><i class="bi bi-exclamation-triangle me-2"></i>Error loading notifications</div>';
+        });
+    }
+
+    // Load notifications on page load
+    loadStaffNotifications();
+    
+    // Refresh notifications every 2 seconds
+    setInterval(loadStaffNotifications, 2000);
+
+    // Success modal function
+    function showSuccessModal(message) {
+        // Create modal HTML
+        const modalHtml = `
+            <div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-body text-center py-4">
+                            <div class="mb-3">
+                                <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                            </div>
+                            <h5 class="modal-title mb-3" id="successModalLabel">Success!</h5>
+                            <p class="mb-0">${message}</p>
+                        </div>
+                        <div class="modal-footer border-0 justify-content-center">
+                            <button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">OK</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if present
+        const existingModal = document.getElementById('successModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('successModal'));
+        modal.show();
+
+        // Auto remove modal after it's hidden
+        document.getElementById('successModal').addEventListener('hidden.bs.modal', function() {
+            this.remove();
+        });
+    }
+
+    // Modal functions
+    function showVisitorModal(id) {
+        const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+        const modalLabel = document.getElementById('detailsModalLabel');
+        const modalSubtitle = document.getElementById('modalSubtitle');
+        const modalBody = document.getElementById('modalBody');
+        const modalIcon = document.getElementById('modalIcon');
+        
+        // Show loading state
+        modalLabel.textContent = 'Visitor Details';
+        modalSubtitle.textContent = 'Loading...';
+        modalIcon.innerHTML = '<i class="bi bi-person-fill"></i>';
+        modalBody.innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="text-muted mt-3">Loading visitor details...</p>
+            </div>
+        `;
+        modal.show();
+
+        // Fetch visitor details
+        fetch(`/visitors/${id}/details`, {
+            method: 'GET',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to load visitor details');
+            return response.json();
+        })
+        .then(data => {
+            const checkInTime = data.check_in_time ? new Date(data.check_in_time).toLocaleString() : 'N/A';
+            const checkOutTime = data.check_out_time ? new Date(data.check_out_time).toLocaleString() : 'Not checked out';
+            const statusBadge = data.status === 'checked_in' 
+                ? '<span class="badge bg-warning">Checked In</span>'
+                : data.status === 'checked_out'
+                ? '<span class="badge bg-success">Checked Out</span>'
+                : '<span class="badge bg-danger">Cancelled</span>';
+            
+            const photoHtml = data.photo_path 
+                ? `<img src="/storage/${data.photo_path}" alt="${data.name}" class="rounded-circle shadow-sm" style="width: 120px; height: 120px; object-fit: cover; border: 4px solid #0d1b2a;">`
+                : `<div class="rounded-circle shadow-sm d-flex align-items-center justify-content-center bg-primary text-white" style="width: 120px; height: 120px; margin: 0 auto; font-size: 3rem;"><i class="bi bi-person-fill"></i></div>`;
+
+            modalLabel.textContent = data.name;
+            modalSubtitle.textContent = 'Visitor Information';
+            modalBody.innerHTML = `
+                <div class="text-center mb-4">
+                    ${photoHtml}
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-person text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Full Name</label>
+                            </div>
+                            <div class="fw-semibold text-dark">${data.name || 'N/A'}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-telephone text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Phone Number</label>
+                            </div>
+                            <div class="fw-semibold text-dark">${data.phone || 'N/A'}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-briefcase text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Purpose</label>
+                            </div>
+                            <div class="fw-semibold text-dark">${data.purpose || 'N/A'}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-person-badge text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Status</label>
+                            </div>
+                            <div>${statusBadge}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-box-arrow-in-right text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Check-In Time</label>
+                            </div>
+                            <div class="fw-semibold text-dark">${checkInTime}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-box-arrow-right text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Check-Out Time</label>
+                            </div>
+                            <div class="fw-semibold text-dark">${checkOutTime}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('Error loading visitor details:', error);
+            modalBody.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Failed to load visitor details. Please try again.
+                </div>
+            `;
+        });
+    }
+
+    function showAppointmentModal(id) {
+        const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+        const modalLabel = document.getElementById('detailsModalLabel');
+        const modalSubtitle = document.getElementById('modalSubtitle');
+        const modalBody = document.getElementById('modalBody');
+        const modalIcon = document.getElementById('modalIcon');
+        
+        // Show loading state
+        modalLabel.textContent = 'Appointment Details';
+        modalSubtitle.textContent = 'Loading...';
+        modalIcon.innerHTML = '<i class="bi bi-calendar-event"></i>';
+        modalBody.innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="text-muted mt-3">Loading appointment details...</p>
+            </div>
+        `;
+        modal.show();
+
+        // Fetch appointment details
+        fetch(`/appointments/${id}/details`, {
+            method: 'GET',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to load appointment details');
+            return response.json();
+        })
+        .then(data => {
+            const appointmentTime = data.appointment_time ? new Date(data.appointment_time).toLocaleString() : 'N/A';
+            const statusColor = data.status === 'pending' ? 'warning' 
+                : data.status === 'confirmed' ? 'success'
+                : data.status === 'completed' ? 'success'
+                : data.status === 'canceled' ? 'danger'
+                : 'secondary';
+            const statusBadge = `<span class="badge bg-${statusColor}">${data.status ? data.status.charAt(0).toUpperCase() + data.status.slice(1) : 'N/A'}</span>`;
+            
+            modalLabel.textContent = data.visitor_name || 'Appointment';
+            modalSubtitle.textContent = 'Appointment Information';
+            modalBody.innerHTML = `
+                <div class="text-center mb-4">
+                    <div class="rounded-circle shadow-sm d-flex align-items-center justify-content-center bg-primary text-white mx-auto" style="width: 120px; height: 120px; font-size: 3rem;">
+                        <i class="bi bi-calendar-event"></i>
+                    </div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-person text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Visitor Name</label>
+                            </div>
+                            <div class="fw-semibold text-dark">${data.visitor_name || 'N/A'}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-telephone text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Visitor Phone</label>
+                            </div>
+                            <div class="fw-semibold text-dark">${data.visitor_phone || 'N/A'}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-calendar-check text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Appointment Time</label>
+                            </div>
+                            <div class="fw-semibold text-dark">${appointmentTime}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-info-circle text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Status</label>
+                            </div>
+                            <div>${statusBadge}</div>
+                        </div>
+                    </div>
+                    ${data.purpose ? `
+                    <div class="col-12">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-briefcase text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Purpose</label>
+                            </div>
+                            <div class="fw-semibold text-dark">${data.purpose}</div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${data.user ? `
+                    <div class="col-12">
+                        <div class="detail-item p-3 bg-light rounded-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-person-badge text-primary fs-5"></i>
+                                <label class="text-muted small mb-0">Assigned Staff</label>
+                            </div>
+                            <div class="fw-semibold text-dark">${data.user.name || 'N/A'}</div>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('Error loading appointment details:', error);
+            modalBody.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Failed to load appointment details. Please try again.
+                </div>
+            `;
         });
     }
 </script>

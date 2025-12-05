@@ -53,7 +53,7 @@ class RegisterController extends Controller
             case 'receptionist':
                 return route('dashboard');
             case 'admin':
-                return route('admin_dashboard');
+                return route('admin.dashboard');
             case 'staff':
                 return route('staff_dashboard');
             default:

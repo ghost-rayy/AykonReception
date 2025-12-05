@@ -19,6 +19,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Ensure all dates use UTC/GMT
+        date_default_timezone_set('UTC');
     }
 }
